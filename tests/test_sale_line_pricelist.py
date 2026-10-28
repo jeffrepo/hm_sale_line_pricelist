@@ -110,8 +110,9 @@ class TestSaleLinePricelist(TransactionCase):
             "name": "HM Combo Choice",
             "combo_item_ids": [Command.create({"product_id": self.product.id})],
         })
-        product = self.product.copy({
-            "name": "HM Combo", "type": "combo", "combo_ids": [Command.link(combo.id)],
+        product = self.env["product.product"].create({
+            "name": "HM Combo", "type": "combo", "list_price": 100,
+            "taxes_id": [Command.clear()], "combo_ids": [Command.link(combo.id)],
         })
         order = self.env["sale.order"].new({
             "partner_id": self.partner.id, "pricelist_id": self.retail.id,
@@ -124,6 +125,7 @@ class TestSaleLinePricelist(TransactionCase):
             ],
         })
         parent, child = order.order_line
+        child.linked_line_id = parent
         self.assertEqual(child.price_unit, 100)
         parent.line_pricelist_id = self.wholesale
         parent._onchange_line_pricelist_id()
