@@ -53,6 +53,11 @@ class SaleOrderLine(models.Model):
 
     def _apply_line_pricelist(self):
         lines = self.filtered(lambda line: not line.display_type)
+        if not lines:
+            return
+        # Unsaved combo components are linked by virtual IDs, so stored-field
+        # dependencies alone do not refresh them in the quotation form.
+        lines |= lines.mapped(lambda line: line._get_linked_lines())
         lines.with_context(force_price_recomputation=True)._compute_price_unit()
         lines._compute_discount()
 

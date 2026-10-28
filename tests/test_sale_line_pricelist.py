@@ -97,10 +97,44 @@ class TestSaleLinePricelist(TransactionCase):
         self.assertEqual(copied.order_line[1].line_pricelist_id, self.wholesale)
         self.assertEqual(copied.order_line[1].price_unit, 80)
 
+    def test_no_matching_rule_uses_product_price(self):
+        empty = self.env["product.pricelist"].create({
+            "name": "No rules", "currency_id": self.env.company.currency_id.id,
+        })
+        line = self._order().order_line[1]
+        line.line_pricelist_id = empty
+        self.assertEqual(line.price_unit, 100)
+
+    def test_unsaved_combo_components_follow_parent_tariff(self):
+        combo = self.env["product.combo"].create({
+            "name": "HM Combo Choice",
+            "combo_item_ids": [Command.create({"product_id": self.product.id})],
+        })
+        product = self.product.copy({
+            "name": "HM Combo", "type": "combo", "combo_ids": [Command.link(combo.id)],
+        })
+        order = self.env["sale.order"].new({
+            "partner_id": self.partner.id, "pricelist_id": self.retail.id,
+            "order_line": [
+                Command.create({"product_id": product.id, "virtual_id": "hm-combo"}),
+                Command.create({
+                    "product_id": self.product.id, "combo_item_id": combo.combo_item_ids.id,
+                    "linked_virtual_id": "hm-combo",
+                }),
+            ],
+        })
+        parent, child = order.order_line
+        self.assertEqual(child.price_unit, 100)
+        parent.line_pricelist_id = self.wholesale
+        parent._onchange_line_pricelist_id()
+        self.assertEqual(parent.price_unit, 0)
+        self.assertEqual(child.price_unit, 80)
+
     def test_currency_rejected_on_line_and_order(self):
-        other_currency = self.env["res.currency"].search([
+        other_currency = self.env["res.currency"].with_context(active_test=False).search([
             ("id", "!=", self.env.company.currency_id.id),
         ], limit=1)
+        other_currency.active = True
         foreign = self.wholesale.copy({"currency_id": other_currency.id})
         order = self._order()
         with self.assertRaises(ValidationError), self.cr.savepoint():
