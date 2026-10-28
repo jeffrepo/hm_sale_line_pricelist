@@ -1,0 +1,51 @@
+name: Odoo 18 tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: odoo:18.0
+      options: --user root --shm-size=1g
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd "pg_isready -U odoo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hm_sale_line_pricelist
+      - name: Install module and run tests
+        run: |
+          install -d -o odoo -g odoo /tmp/hm-odoo-data
+          set -o pipefail
+          runuser -u odoo -- odoo \
+            --db_host=postgres --db_user=odoo --db_password=odoo \
+            --database=hm_tests --data-dir=/tmp/hm-odoo-data \
+            --addons-path=/usr/lib/python3/dist-packages/odoo/addons,"$GITHUB_WORKSPACE" \
+            --init=hm_sale_line_pricelist \
+            --test-enable --test-tags=/hm_sale_line_pricelist \
+            --stop-after-init --workers=0 --max-cron-threads=0 \
+            --http-interface=127.0.0.1 --log-level=test 2>&1 | tee /tmp/odoo-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: odoo-test-log
+          path: /tmp/odoo-test.log
+
